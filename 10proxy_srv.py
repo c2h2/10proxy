@@ -1,12 +1,29 @@
-import socket, thread, select
+import socket
+import thread
+import select
+import time
+import sys
+import signal
 
 __version__ = '0.1.0'
 BUFLEN = 8192
 VERSION = '10proxy/'+__version__
 HTTPVER = 'HTTP/1.1'
+CONN_TIMEOUT=10
+
+num_active_conns = 0
+
+
+def signal_handler(signal, frame):
+        print('You pressed Ctrl+C!')
+        sys.exit(0)
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.pause()
 
 class ConnectionHandler:
     def __init__(self, connection, address, timeout):
+        global num_active_conns
+        num_active_conns += 1 
         self.client = connection
         self.client_buffer = ''
         self.timeout = timeout
@@ -77,19 +94,27 @@ class ConnectionHandler:
                         count = 0
             if count == time_out_max:
                 break
+        global num_active_conns
+        num_active_conns-=1
 
-def start_server(host='0.0.0.0', port=5000, IPv6=False, timeout=60,
-                  handler=ConnectionHandler):
+
+def start_server(host='0.0.0.0', port=5000, IPv6=False, timeout=CONN_TIMEOUT, handler=ConnectionHandler):
     if IPv6==True:
         soc_type=socket.AF_INET6
     else:
         soc_type=socket.AF_INET
     soc = socket.socket(soc_type)
     soc.bind((host, port))
-    print "Serving on %s:%d."%(host, port)#debug
-    soc.listen(0)
+    #print "Serving on %s:%d."%(host, port)#debug
+    soc.listen(1024)
     while 1:
         thread.start_new_thread(handler, soc.accept()+(timeout,))
 
+def stats(interval):
+    while True:
+        print("STATS: Num of Connections " + str(num_active_conns))
+        time.sleep(interval)
+
 if __name__ == '__main__':
+    thread.start_new_thread(stats,(1,))
     start_server()
